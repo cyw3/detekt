@@ -6,6 +6,7 @@ import io.gitlab.arturbosch.detekt.cli.CliArgs
 import io.gitlab.arturbosch.detekt.cli.ReportLocator
 import io.gitlab.arturbosch.detekt.cli.parseArguments
 import io.gitlab.arturbosch.detekt.core.ProcessingSettings
+import io.gitlab.arturbosch.detekt.test.NullPrintStream
 import io.gitlab.arturbosch.detekt.test.yamlConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Condition
@@ -27,7 +28,7 @@ internal class ReportsSpec : Spek({
                 "--report", "$reportUnderTest:/tmp/path3",
                 "--report", "html:D:_Gradle\\xxx\\xxx\\build\\reports\\detekt\\detekt.html"
             )
-            val cli = parseArguments<CliArgs>(args)
+            val cli = parseArguments<CliArgs>(args, NullPrintStream(), NullPrintStream())
 
             val reports = cli.reportPaths
 
@@ -61,7 +62,11 @@ internal class ReportsSpec : Spek({
                 )
             }
 
-            val extensions = ProcessingSettings(listOf()).use { ReportLocator(it).load() }
+            val extensions = ProcessingSettings(
+                listOf(),
+                outPrinter = NullPrintStream(),
+                errPrinter = NullPrintStream()
+            ).use { ReportLocator(it).load() }
             val extensionsIds = extensions.mapTo(HashSet()) { it.id }
 
             it("should be able to convert to output reports") {
@@ -83,7 +88,12 @@ internal class ReportsSpec : Spek({
 
             it("yields empty extension list") {
                 val config = yamlConfig("configs/disabled-reports.yml")
-                val extensions = ProcessingSettings(listOf(), config).use { ReportLocator(it).load() }
+                val extensions = ProcessingSettings(
+                    listOf(),
+                    config,
+                    outPrinter = NullPrintStream(),
+                    errPrinter = NullPrintStream()
+                ).use { ReportLocator(it).load() }
                 assertThat(extensions).isEmpty()
             }
         }

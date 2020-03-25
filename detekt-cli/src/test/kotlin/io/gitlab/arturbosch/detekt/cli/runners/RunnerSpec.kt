@@ -1,17 +1,16 @@
 package io.gitlab.arturbosch.detekt.cli.runners
 
 import io.gitlab.arturbosch.detekt.cli.BuildFailure
+import io.gitlab.arturbosch.detekt.test.StringPrintStream
 import io.gitlab.arturbosch.detekt.cli.config.InvalidConfig
 import io.gitlab.arturbosch.detekt.cli.createCliArgs
+import io.gitlab.arturbosch.detekt.test.NullPrintStream
 import io.gitlab.arturbosch.detekt.test.resource
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
-import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -19,7 +18,6 @@ import java.nio.file.Paths
 class RunnerSpec : Spek({
 
     val inputPath: Path = Paths.get(resource("cases/Poko.kt"))
-    val charSetName = Charset.defaultCharset().name()
 
     describe("executes the runner with different maxIssues configurations") {
 
@@ -31,7 +29,7 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/max-issues-2.yml"
             )
 
-            Runner(cliArgs).execute()
+            Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute()
 
             assertThat(Files.readAllLines(tmpReport)).hasSize(1)
         }
@@ -42,7 +40,8 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/max-issues-0.yml"
             )
 
-            assertThatThrownBy { Runner(cliArgs).execute() }.isExactlyInstanceOf(BuildFailure::class.java)
+            assertThatThrownBy { Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute() }
+                .isExactlyInstanceOf(BuildFailure::class.java)
         }
 
         it("should throw on invalid config property when validation=true") {
@@ -51,7 +50,7 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/invalid-config.yml"
             )
 
-            assertThatThrownBy { Runner(cliArgs).execute() }
+            assertThatThrownBy { Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute() }
                 .isExactlyInstanceOf(InvalidConfig::class.java)
                 .hasMessageContaining("property")
         }
@@ -62,7 +61,7 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/invalid-configs.yml"
             )
 
-            assertThatThrownBy { Runner(cliArgs).execute() }
+            assertThatThrownBy { Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute() }
                 .isExactlyInstanceOf(InvalidConfig::class.java)
                 .hasMessageContaining("properties")
         }
@@ -73,7 +72,8 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/invalid-config_no-validation.yml"
             )
 
-            assertThatCode { Runner(cliArgs).execute() }.doesNotThrowAnyException()
+            assertThatCode { Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute() }
+                .doesNotThrowAnyException()
         }
 
         it("should never throw on maxIssues=-1") {
@@ -84,7 +84,7 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/max-issues--1.yml"
             )
 
-            Runner(cliArgs).execute()
+            Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute()
 
             assertThat(Files.readAllLines(tmpReport)).hasSize(1)
         }
@@ -100,7 +100,7 @@ class RunnerSpec : Spek({
                     "--baseline", Paths.get(resource("configs/baseline-with-two-excludes.xml")).toString()
                 )
 
-                Runner(cliArgs).execute()
+                Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute()
 
                 assertThat(Files.readAllLines(tmpReport)).isEmpty()
             }
@@ -119,7 +119,7 @@ class RunnerSpec : Spek({
                 "--config-resource", "/configs/max-issues-0.yml"
             )
 
-            Runner(cliArgs).execute()
+            Runner(cliArgs, NullPrintStream(), NullPrintStream()).execute()
 
             assertThat(tmpReport).hasContent("")
         }
@@ -127,11 +127,8 @@ class RunnerSpec : Spek({
 
     describe("customize output and error printers") {
 
-        val outputPrinterBuffer by memoized { ByteArrayOutputStream() }
-        val outputPrinter by memoized { PrintStream(outputPrinterBuffer) }
-
-        val errorPrinterBuffer by memoized { ByteArrayOutputStream() }
-        val errorPrinter by memoized { PrintStream(errorPrinterBuffer) }
+        val outPrintStream by memoized { StringPrintStream() }
+        val errPrintStream by memoized { StringPrintStream() }
 
         context("execute with default config which allows no issues") {
 
@@ -140,21 +137,15 @@ class RunnerSpec : Spek({
             beforeEachTest {
                 val args = createCliArgs("--input", path.toString())
 
-                Runner(args, outputPrinter, errorPrinter).execute()
-
-                outputPrinter.flush()
-                outputPrinter.close()
-
-                errorPrinter.flush()
-                errorPrinter.close()
+                Runner(args, outPrintStream, errPrintStream).execute()
             }
 
             it("writes no build related output to output printer") {
-                assertThat(outputPrinterBuffer.toString(charSetName)).doesNotContain("test - [Poko]")
+                assertThat(outPrintStream.toString()).doesNotContain("test - [Poko]")
             }
 
             it("does not write anything to error printer") {
-                assertThat(errorPrinterBuffer.toString(charSetName)).isEmpty()
+                assertThat(errPrintStream.toString()).isEmpty()
             }
         }
 
@@ -166,23 +157,17 @@ class RunnerSpec : Spek({
                     "--config-resource", "/configs/max-issues-0.yml")
 
                 try {
-                    Runner(args, outputPrinter, errorPrinter).execute()
+                    Runner(args, outPrintStream, errPrintStream).execute()
                 } catch (ignored: BuildFailure) {
                 }
-
-                outputPrinter.flush()
-                outputPrinter.close()
-
-                errorPrinter.flush()
-                errorPrinter.close()
             }
 
             it("writes output to output printer") {
-                assertThat(outputPrinterBuffer.toString(charSetName)).contains("test - [Poko]")
+                assertThat(outPrintStream.toString()).contains("test - [Poko]")
             }
 
             it("does not write anything to error printer") {
-                assertThat(errorPrinterBuffer.toString(charSetName)).isEmpty()
+                assertThat(errPrintStream.toString()).isEmpty()
             }
         }
     }
